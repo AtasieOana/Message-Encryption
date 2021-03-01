@@ -1,0 +1,181 @@
+.data
+p: .space 4
+v: .space 400
+a: .space 400 # copy of v
+text1: .asciiz "There is no generator"
+text2: .asciiz "The generator is: "
+text3: .asciiz "The number read is not a prime number."
+mclar: .space 100 # the message to be encrypted
+alfabet: .asciiz "ABCDEFGHIJKLMNO"
+linieptcriptare: .asciiz "\nThe encrypted message is: "
+linieptdecriptare: .asciiz "\nThe decrypted message is: "
+mcriptat: .space 100 # the message to be decrypted
+endl: .byte '\n'
+.text
+main:
+ li $v0,5
+ syscall
+ move $t0,$v0
+ sw $t0,p # saving p to memory
+ blt $t0,2,nu_e_prim # if p is less than 2, then p is not prime
+ beq $t0,2,p_e_2 # if p is 2, then it is known that the generator is 1 and will be a special case
+ div $t1,$t0,2
+ addi $t1,1 # $t1 will retain [p/2]+1
+ li $t2,2 # $t2 will scroll through the numbers from 2 to [p/2]
+ verifprim: # we check if p is prime
+        bge $t2,$t1,p_prim
+        rem $t3,$t0,$t2 # $t3 keep the remainder of dividing $ t0 (ie p) by $ t2 (ie possible divisors)
+        beq $t3,$0,nu_e_prim # if the remainder is 0 it means that p has a divisor, so p is not prime
+        addi $t2,1
+        j verifprim
+ p_prim:  # p is prime    
+        li $t1,0 # $t1 will go through the numbers up to p-1 and represents the possible generator g
+        j loop # if p is prime it will continue with the power vector
+ loop: # the formation of the power vector begins
+        addi $t1,1
+        bge $t1,$t0,nu_exista_generator
+        li $t2,1 # t2 represents the power at which g will be raised
+        li $t4,0 # t4 is used to skip locations in memory 4 by 4
+        rem $t3,$t2,$t0 # $t3 will retain g at power 0 (ie 1) mode p
+        sw $t3,v($t4) # we retain g at the power 0 mode p in the vector
+        sw $t3,a($t4) # we retain g at power 0 mod p in the vector copy
+        addi $t4,4
+        j loop_puteri 
+ loop_puteri:
+        bge $t2,$t0,reinitializare
+        mul $t3,$t3,$t1 # $t3 will retain the product between the g in the previous step and g
+        rem $t3,$t3,$t0 # $t3 will retain (the product between the g in the previous step and g) mode p
+        sw $t3,v($t4) # we retain $ t3 in the vector
+        sw $t3,a($t4) # we retain $ t3 in the vector copy
+        addi $t4,4
+        addi $t2,1
+        j loop_puteri
+  reinitializare: # after the power vector has been formed, some registers are reset, following the sorting of the vector
+        li $t2,0 # t2 is used to skip locations in memory 4 by 4
+        li $t4,4 # t4 is used to skip locations in memory 4 by 4
+        mul $t6,$t0,4 # $t6 retains the space occupied by the vector elements
+        j sortare
+  sortare:
+        bge $t4,$t6,verificare # until the end of the vector is reached
+        lw  $t3, a($t2) # sets $t3 to the current element in the vector 
+        lw  $t5, a($t4)  # sets $t5 to the next element in the vector
+        bgt $t3, $t5, swap  # if the next value is lower, then invert them
+        addi $t2,4
+        addi $t4,4
+        j sortare
+  swap: # the elements of the vector are interchanged
+        sw  $t3, a($t4) # stores the largest number in the largest position in the vector
+        sw  $t5, a($t2) # stores the smallest number in the lowest position in the vector
+        li $t2,0
+        li $t4,4
+        j sortare
+  verificare:
+        subu $t6,4
+        li $t4,4
+        j strict_crescator
+  strict_crescator:
+        bge $t4,$t6,afisare
+        lw  $t3, a($t4) # sets $t3 to the current element in the vector
+        addi $t4,4
+        lw  $t5, a($t4)  # sets $t5 to the next element in the vector
+        bge $t3, $t5, loop # if the vector isn't strictly sorted the program will move to the next possible g
+        j strict_crescator
+   afisare: # the generator is displayed
+        la $a0,text2
+        li $v0,4
+        syscall
+        move $a0,$t1 # the generator is displayed
+        li $v0,1
+        syscall
+        j criptare
+   p_e_2:
+        li $t1,1 # in $ t1 is retained 1, as a generator for p = 2
+        la $a0,text2
+        li $v0,4
+        syscall
+        move $a0,$t1 # the generator is displayed
+        li $v0,1
+        syscall   
+        j final
+   nu_e_prim:
+        la $a0,text3 # the number is not prime and a corresponding message is displayed
+        li $v0,4
+        syscall
+        li $v0,10
+        syscall
+   nu_exista_generator: # there is no generator and a corresponding message is displayed
+        la $a0,text1
+        li $v0,4
+        syscall
+        li $v0,10
+        syscall
+    criptare: # the process of encrypting the clear message begins
+        la $a0,linieptcriptare
+        li $v0,4
+        syscall
+        la $a0,mclar # the clear message is stored in memory in the allocated area and loaded as the address in the $a0 
+        li $a1,99
+        li $v0,8
+        syscall
+        li $t0,0 # memory location counter
+        lb $t1,mclar($t0) # in $t1 the first character of the clear message is retained
+        li $t2,0 # t2 is used to jump locations in memory 1 in 1
+        j poz_alfabet
+    poz_alfabet:
+        beqz $t1,descriptare # if the end of the message has been reached, the program proceeds to decrypt the message
+        lb $t7,endl
+        beq $t1,$t7,descriptare
+        lb $t3,alfabet($t2) # $t3 retains one letter in the alphabet to be compared to the letter in the clear message
+        bne $t1,$t3,cont # the position of the character in the clear message in the alphabet is sought
+        mul $t2,$t2,4
+        lw $t4,v($t2)  # $t4 retains the power of the generator from the position of the character in the alphabet modulo p
+        lb $t3,alfabet($t4) # in $t3 the letter in the encrypted message is retained
+        move $a0,$t3 
+        li $v0,11 # the letter in the encrypted message is displayed
+        syscall 
+        addi $t0,1
+        li $t2,0
+        lb $t1,mclar($t0) # in $t1 the following character is retained from the clear message
+        j poz_alfabet
+     cont:
+        addi $t2,1  
+        j poz_alfabet 
+     descriptare: # the decryption process of the encrypted message begins
+        la $a0,linieptdecriptare
+        li $v0,4
+        syscall
+        la $a0,mcriptat # the message is stored in memory in the allocated area and loaded as the address in the $ a0 register
+        li $a1,99
+        li $v0,8
+        syscall
+        li $t0,0 # memory location counter
+        lb $t1,mcriptat($t0) # in $t1 the first character of the encrypted message is retained
+        li $t2,0 # $t2 is used to skip memory locations 1 by 1
+        li $t4,0 # $t4 is used to skip memory locations 4 by 4
+        j indice_alfabet
+     indice_alfabet:
+        beqz $t1,final # if the end of the encrypted message has been reached, decryption is complete
+        lw $t5,v($t4) # in $t5 there will be a power of p
+        lb $t3,alfabet($t2) # $t3 remember one letter in the alphabet to be compared to the letter in the encrypted message
+        bne $t1,$t3,cont1 # the position of the character in the encrypted message in the alphabet is searched
+        bne $t5,$t2,nu_a_fost_gasita_puterea # we look for the power of p - it is equal to the position in the alphabet of the 
+                                             # character
+        div $t4,$t4,4
+        lb $t3,alfabet($t4) # in $t3 the letter from the decrypted message is retained
+        move $a0,$t3
+        li $v0,11
+        syscall # the letter in the decrypted message is displayed
+        addi $t0,1
+        li $t2,0
+        li $t4,0
+        lb $t1,mcriptat($t0) # in $t1 the next character in the encrypted message is retained
+        j indice_alfabet
+     cont1:
+        addi $t2,1  
+        j indice_alfabet
+     nu_a_fost_gasita_puterea:
+        addi $t4,4  
+        j indice_alfabet
+     final:   
+        li $v0,10
+        syscall
